@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FATY — Terminal</title>
+<style>
+:root{--bg:#300a24;--win:#1d0a17ee;--bar:#3a2a36;--g:#8ae234;--o:#e95420;--c:#34e2e2;--y:#fce94f;--ink:#eeeeec;--mut:#a39aa0}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:radial-gradient(1000px 600px at 20% 0%,#77216f,transparent),linear-gradient(135deg,#2c001e,#5e2750 60%,#e9542033);padding:3vh 3vw;font-family:"Ubuntu Mono","Fira Code","DejaVu Sans Mono",Consolas,"Noto Sans Arabic",monospace;color:var(--ink)}
+.win{height:100%;max-width:980px;margin:auto;background:var(--win);border-radius:12px;box-shadow:0 25px 70px #000a,0 0 0 1px #ffffff1a;display:flex;flex-direction:column;overflow:hidden;direction:ltr}
+.bar{display:flex;align-items:center;gap:10px;padding:9px 14px;background:linear-gradient(#4a3945,var(--bar));border-bottom:1px solid #0006}
+.dots{display:flex;gap:8px}.dots i{width:13px;height:13px;border-radius:50%;background:#555}.dots i:nth-child(1){background:var(--o)}.dots i:nth-child(2){background:var(--y)}.dots i:nth-child(3){background:var(--g)}
+.ttl{flex:1;text-align:center;font-size:13px;color:#d8d0d4;display:flex;align-items:center;justify-content:center;gap:8px}
+.sp{font:inherit;font-size:12px;color:var(--mut);background:transparent;border:1px solid #ffffff2a;border-radius:6px;padding:3px 9px;cursor:pointer}
+#log{flex:1;overflow:auto;padding:18px 22px;font-size:19px;line-height:2.1;font-weight:500;color:#fff;font-family:"Segoe UI",Tahoma,"Noto Sans Arabic","Noto Naskh Arabic",Arial,sans-serif;direction:rtl;text-align:right}
+#log::-webkit-scrollbar{width:8px}#log::-webkit-scrollbar-thumb{background:#ffffff26;border-radius:4px}
+.l{margin:0 0 10px;white-space:pre-wrap;animation:in .25s}@keyframes in{from{opacity:0}}
+.p{color:var(--g);font-weight:bold}.p b{color:var(--c)}.f{color:var(--o);font-weight:bold}
+.sys{color:#cfc6cb}.l a{color:var(--c)}
+.cur:after{content:"▋";color:var(--g);animation:b 1s steps(1) infinite}@keyframes b{50%{opacity:0}}
+.in{display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid #ffffff14;direction:rtl}
+.in .p{white-space:nowrap}
+.in input{flex:1;min-width:0;font:inherit;font-family:"Segoe UI",Tahoma,"Noto Sans Arabic",Arial,sans-serif;font-size:19px;color:#fff;background:transparent;border:0;outline:0;caret-color:var(--g)}
+#go{font:inherit;font-size:16px;font-weight:bold;color:#fff;background:linear-gradient(135deg,var(--o),#c7400f);border:0;border-radius:8px;padding:0 20px;height:36px;cursor:pointer}
+#mic{font-size:18px;background:transparent;border:1px solid #ffffff2a;color:var(--g);border-radius:8px;width:38px;height:34px;cursor:pointer}
+#mic.rec{color:#fff;background:var(--o);border-color:var(--o);animation:b 1s infinite}
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="bar">
+    <div class="dots"><i></i><i></i><i></i></div>
+    <div class="ttl">
+      <svg width="20" height="20" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e95420"/><stop offset="1" stop-color="#8ae234"/></linearGradient></defs><path d="M32 3 58 18v28L32 61 6 46V18z" fill="url(#g)"/><path d="M21 46V19h22v6H28v5h12v6H28v10z" fill="#fff"/></svg>
+      faty@FATYAK: ~ — FATY Terminal
+    </div>
+    <button class="sp" id="spk">🔊 sound</button>
+  </div>
+  <div id="log"></div>
+  <div class="in">
+    <button id="mic" title="تحدث">🎤</button>
+    <span class="p"><b>فاتح</b></span>
+    <input id="in" placeholder="اكتب سؤالك أو نادِ FATY…" autocomplete="off" autofocus>
+    <button id="go">إرسال</button>
+  </div>
+</div>
+<script>
+const USER="فاتح",$=id=>document.getElementById(id),log=$('log'),inp=$('in');
+let speakOn=true,busy=false,hist=[];
+const RSS=q=>`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent('https://news.google.com/rss/search?q='+encodeURIComponent(q+' when:2d')+'&hl=ar&gl=DZ&ceid=DZ:ar')}`;
+async function headlines(q,n=8){const r=await fetch(RSS(q));if(!r.ok)throw 0;const j=await r.json();if(!j.items||!j.items.length)throw 0;return j.items.slice(0,n).map(i=>({t:i.title,l:i.link}))}
+const clean=t=>t.replace(/ - [^-]+$/,'');
+function line(h,c){const d=document.createElement('div');d.className='l '+(c||'');d.innerHTML=h;log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
+const esc=s=>s.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+function say(t){if(!speakOn||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t.replace(/[*#_`]/g,'').slice(0,600));u.lang='ar-SA';const v=speechSynthesis.getVoices().find(v=>v.lang.startsWith('ar'));if(v)u.voice=v;speechSynthesis.speak(u)}
+$('spk').onclick=function(){speakOn=!speakOn;this.textContent=speakOn?'🔊 sound':'🔇 mute';if(!speakOn)speechSynthesis.cancel()};
+(()=>{line('<span class="sys">Developer: FATYAK</span>');
+ const w=`${new Date().getHours()<12?'صباح الخير':'مساء الخير'} يا ${USER}، أنا FATY مساعدك الذكي.`;
+ line('<span class="f">FATY&gt;</span> '+w);})();
+const NAME=/(فاتي|فاتى|فيتي|faty)/i;
+let lastErr='';const tmo=(p,ms)=>Promise.race([p,new Promise((_,j)=>setTimeout(j,ms))]);
+const CHAT=/^(مرحبا|مرحبًا|أهلا|اهلا|السلام|سلام|صباح|مساء|هاي|كيف حالك|كيفك|شكرا|شكراً|تسلم|مع السلامة|من أنت|من انت|ما اسمك|ما اسمي|هل تسمعني)/;
+async function wiki(q){const u=`https://ar.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrlimit=3&prop=extracts&exintro=1&explaintext=1&exchars=900&format=json&origin=*`;
+ const j=await (await fetch(u)).json();const p=Object.values((j.query||{}).pages||{}).sort((a,b)=>a.index-b.index);if(!p.length)throw 0;return p.map(x=>`[ويكيبيديا: ${x.title}] ${x.extract}`).join('\n')}
+const today=()=>new Date().toLocaleDateString('ar',{dateStyle:'full'});
+async function ai(q,ctx){const sys=`أنت FATY، مساعد ذكاء اصطناعي عربي بالغ الذكاء والدقة والاحترافية، مطوَّر من FATYAK. المستخدم اسمه ${USER}، ناده باسمه أحياناً. تاريخ اليوم: ${today()}.
+قواعد صارمة:
+1) الدقة أولاً: فكّر بتأنٍّ وتحقق من إجابتك داخلياً قبل كتابتها. لا تخمّن ولا تختلق أسماء أو تواريخ أو أرقاماً أو آيات أو أحاديث أو مصادر. إن لم تتأكد فقل ذلك صراحة.
+2) معرفتك الداخلية قد تكون قديمة وتنتهي قبل اليوم بكثير. لأي معلومة حديثة أو تتغير مع الزمن (مناصب، أحداث، أسعار، نتائج) اعتمد فقط على "المراجع الحديثة" أدناه، وإن لم تكفِ فقل إنك لا تملك معلومة حديثة مؤكدة. المراجع الحديثة تتقدم على ذاكرتك عند أي تعارض.
+3) الدين: التزم بما اتفق عليه جمهور أهل السنة والجماعة، وانسب الأقوال لأصحابها، ولا تذكر نص آية أو حديث إلا إذا كنت متأكداً منه حرفياً مع اسم السورة ورقم الآية أو الراوي ودرجة الحديث، وإلا اشرح المعنى دون اقتباس. في مسائل الخلاف اعرض الأقوال بإنصاف، وفي الفتاوى الشخصية انصح بسؤال عالم موثوق. اختم عند الحاجة بـ"والله أعلم".
+4) التاريخ: اذكر التواريخ والأسماء بحذر، ميّز بين المتفق عليه والمختلف فيه، ولا تنسب أحداثاً لغير أصحابها.
+5) الأسلوب: عربية فصحى بسيطة وواضحة جداً، جمل قصيرة، إجابة مباشرة تبدأ بالمطلوب، من 3 إلى 7 جمل (أكثر فقط إن لزم)، دون رموز تنسيق مثل النجوم والعناوين. في الحديث العادي كن طبيعياً ودوداً.
+${ctx?'\nالمراجع الحديثة:\n'+ctx:'\nلا توجد مراجع حديثة لهذا السؤال.'}`;
+ const msgs=[{role:'system',content:sys},...hist.slice(-6),{role:'user',content:q}];
+ const tries=[
+  ()=>fetch('https://text.pollinations.ai/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'openai',messages:msgs})}),
+  ()=>fetch('https://text.pollinations.ai/openai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'openai-large',messages:msgs})}),
+  ()=>fetch('https://text.pollinations.ai/'+encodeURIComponent(q)+'?model=openai&system='+encodeURIComponent(sys.slice(0,1800)))];
+ for(const f of tries){try{const r=await tmo(f(),20000);const t=(await r.text()).trim();
+  if(r.ok&&t.length>1&&t[0]!=='{')return t;if(r.ok&&t[0]==='{'){try{const j=JSON.parse(t);const c=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;if(c)return c.trim()}catch(e){}}
+  lastErr='HTTP '+r.status}catch(e){lastErr=String(e&&e.message||'network')}}
+ throw 0}
+async function send(text){text=(text||'').trim();if(!text||busy)return;inp.value='';
+ line(`<span class="p"><b>${USER}</b></span> ${esc(text)}`);
+ if(NAME.test(text)&&text.replace(NAME,'').replace(/[\s،,؟?!يا]/g,'').length<2){const r=`نعم يا ${USER}، أنا FATY. كيف أساعدك؟`;line('<span class="f">FATY&gt;</span> '+r);say(r);return}
+ busy=true;const w=line('<span class="f">FATY&gt;</span> <span class="sys cur">جارٍ البحث... </span>');let h=[],ctx='',wk='';
+ try{if(text.length>10&&!CHAT.test(text)){
+   const [hr,wr]=await Promise.all([tmo(headlines(text,6),4000).catch(()=>[]),tmo(wiki(text),3500).catch(()=>'')]);
+   h=hr;wk=wr;ctx=(h.length?'عناوين أخبار حديثة:\n'+h.map((x,i)=>`${i+1}. ${x.t}`).join('\n')+'\n':'')+wr}
+  try{const t=await ai(text,ctx);w.innerHTML='<span class="f">FATY&gt;</span> '+esc(t);hist.push({role:'user',content:text},{role:'assistant',content:t});say(t)}
+  catch(e){const F='<span class="f">FATY&gt;</span> ',err=`<br><span class="sys" style="font-size:14px">(تعذر الاتصال بخدمة الذكاء الاصطناعي المجانية: ${esc(lastErr)})</span>`;
+   if(wk){const t=wk.split('\n')[0].replace(/^\[[^\]]*\]\s*/,'');w.innerHTML=F+'هذا ما وجدته في ويكيبيديا:<br>'+esc(t)+err}
+   else if(h.length){w.innerHTML=F+`يا ${USER}، هذه أحدث العناوين المتعلقة بسؤالك:<br>`+h.slice(0,5).map(x=>`• <a href="${x.l}" target="_blank" rel="noopener">${esc(clean(x.t))}</a>`).join('<br>')+err}
+   else w.innerHTML=F+'تعذر الرد الآن.'+err}}
+ finally{busy=false}}
+$('go').onclick=e=>{e.stopPropagation();send(inp.value)};inp.onkeydown=e=>{if(e.key==='Enter')send(inp.value)};document.body.onclick=e=>{if(!getSelection().toString()&&e.target.tagName!=='A')inp.focus()};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec,on=false;const mic=$('mic');
+if(!SR){mic.disabled=true;mic.title='يدعم Chrome وEdge'}else{rec=new SR();rec.lang='ar-SA';rec.interimResults=true;
+ rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;inp.value=t;if(e.results[e.results.length-1].isFinal)send(t)};
+ rec.onend=()=>{on=false;mic.classList.remove('rec')};rec.onerror=()=>{on=false;mic.classList.remove('rec')}}
+mic.onclick=e=>{e.stopPropagation();if(!rec)return;if(on){rec.stop();return}speechSynthesis.cancel();try{rec.start();on=true;mic.classList.add('rec')}catch(x){}};
+</script>
+</body>
+</html>
