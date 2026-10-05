@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FATY — Terminal</title>
+<title>FATY</title>
 <style>
 :root{--bg:#300a24;--win:#1d0a17ee;--bar:#3a2a36;--g:#8ae234;--o:#e95420;--c:#34e2e2;--y:#fce94f;--ink:#eeeeec;--mut:#a39aa0}
 *{box-sizing:border-box}html,body{height:100%;margin:0}
@@ -23,7 +23,7 @@ body{background:radial-gradient(1000px 600px at 20% 0%,#77216f,transparent),line
 .in .p{white-space:nowrap}
 .in input{flex:1;min-width:0;font:inherit;font-family:"Segoe UI",Tahoma,"Noto Sans Arabic",Arial,sans-serif;font-size:19px;color:#fff;background:transparent;border:0;outline:0;caret-color:var(--g)}
 #go{font:inherit;font-size:16px;font-weight:bold;color:#fff;background:linear-gradient(135deg,var(--o),#c7400f);border:0;border-radius:8px;padding:0 20px;height:36px;cursor:pointer}
-#mic{font-size:18px;background:transparent;border:1px solid #ffffff2a;color:var(--g);border-radius:8px;width:38px;height:34px;cursor:pointer}
+#mic,#att{font-size:18px;background:transparent;border:1px solid #ffffff2a;color:var(--g);border-radius:8px;width:38px;height:34px;cursor:pointer}
 #mic.rec{color:#fff;background:var(--o);border-color:var(--o);animation:b 1s infinite}
 </style>
 </head>
@@ -33,19 +33,22 @@ body{background:radial-gradient(1000px 600px at 20% 0%,#77216f,transparent),line
     <div class="dots"><i></i><i></i><i></i></div>
     <div class="ttl">
       <svg width="20" height="20" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e95420"/><stop offset="1" stop-color="#8ae234"/></linearGradient></defs><path d="M32 3 58 18v28L32 61 6 46V18z" fill="url(#g)"/><path d="M21 46V19h22v6H28v5h12v6H28v10z" fill="#fff"/></svg>
-      faty@FATYAK: ~ — FATY Terminal
+      FATY
     </div>
+    <button class="sp" id="rf" title="صفحة جديدة">↻ تحديث</button>
     <button class="sp" id="spk">🔊 sound</button>
   </div>
   <div id="log"></div>
   <div class="in">
     <button id="mic" title="تحدث">🎤</button>
+    <button id="att" title="رفع صورة">📎</button><input type="file" id="file" accept="image/*" hidden>
     <span class="p"><b>فاتح</b></span>
     <input id="in" placeholder="اكتب سؤالك أو نادِ FATY…" autocomplete="off" autofocus>
     <button id="go">إرسال</button>
   </div>
 </div>
 <script>
+if(/^https?:$/.test(location.protocol)){const ps=document.createElement('script');ps.src='https://js.puter.com/v2/';document.head.appendChild(ps)}
 const USER="فاتح",$=id=>document.getElementById(id),log=$('log'),inp=$('in');
 let speakOn=true,busy=false,hist=[];
 const RSS=q=>`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent('https://news.google.com/rss/search?q='+encodeURIComponent(q+' when:2d')+'&hl=ar&gl=DZ&ceid=DZ:ar')}`;
@@ -54,40 +57,148 @@ const clean=t=>t.replace(/ - [^-]+$/,'');
 function line(h,c){const d=document.createElement('div');d.className='l '+(c||'');d.innerHTML=h;log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
 const esc=s=>s.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
 function say(t){if(!speakOn||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t.replace(/[*#_`]/g,'').slice(0,600));u.lang='ar-SA';const v=speechSynthesis.getVoices().find(v=>v.lang.startsWith('ar'));if(v)u.voice=v;speechSynthesis.speak(u)}
+$('rf').onclick=e=>{e.stopPropagation();speechSynthesis.cancel();location.reload()};
 $('spk').onclick=function(){speakOn=!speakOn;this.textContent=speakOn?'🔊 sound':'🔇 mute';if(!speakOn)speechSynthesis.cancel()};
 (()=>{line('<span class="sys">Developer: FATYAK</span>');
  const w=`${new Date().getHours()<12?'صباح الخير':'مساء الخير'} يا ${USER}، أنا FATY مساعدك الذكي.`;
  line('<span class="f">FATY&gt;</span> '+w);})();
 const NAME=/(فاتي|فاتى|فيتي|faty)/i;
-let lastErr='';const tmo=(p,ms)=>Promise.race([p,new Promise((_,j)=>setTimeout(j,ms))]);
+const KEYS={groq:'',gemini:'',openrouter:'',together:'',hf:''};try{KEYS.gemini=localStorage.getItem('faty_gemini')||KEYS.gemini}catch(e){}
+async function askKey(){if(KEYS.gemini)return false;const k=prompt('تحليل الصور لم يعد مجانياً بلا مفتاح. احصل على مفتاح Gemini المجاني من الرابط aistudio.google.com/apikey (يستغرق دقيقة)، ثم الصقه هنا مرة واحدة:');if(k&&k.trim().length>20){KEYS.gemini=k.trim();try{localStorage.setItem('faty_gemini',KEYS.gemini)}catch(e){}return true}return false}let lastErr='';const tmo=(p,ms)=>Promise.race([p,new Promise((_,j)=>setTimeout(j,ms))]);
 const CHAT=/^(مرحبا|مرحبًا|أهلا|اهلا|السلام|سلام|صباح|مساء|هاي|كيف حالك|كيفك|شكرا|شكراً|تسلم|مع السلامة|من أنت|من انت|ما اسمك|ما اسمي|هل تسمعني)/;
 async function wiki(q){const u=`https://ar.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrlimit=3&prop=extracts&exintro=1&explaintext=1&exchars=900&format=json&origin=*`;
  const j=await (await fetch(u)).json();const p=Object.values((j.query||{}).pages||{}).sort((a,b)=>a.index-b.index);if(!p.length)throw 0;return p.map(x=>`[ويكيبيديا: ${x.title}] ${x.extract}`).join('\n')}
 const today=()=>new Date().toLocaleDateString('ar',{dateStyle:'full'});
-async function ai(q,ctx){const sys=`أنت FATY، مساعد ذكاء اصطناعي عربي بالغ الذكاء والدقة والاحترافية، مطوَّر من FATYAK. المستخدم اسمه ${USER}، ناده باسمه أحياناً. تاريخ اليوم: ${today()}.
+async function ai(q,ctx){const sys=`أنت FATY، عالم موسوعي ومساعد ذكاء اصطناعي عربي بالغ الدقة، مطوَّر من FATYAK. أنت متمكن في العلوم الشرعية (القرآن وتفسيره وعلومه، السنة وعلوم الحديث، الفقه وأصوله، العقيدة، السيرة والتاريخ الإسلامي) وفي السياسة والاقتصاد والرياضة والطب والعلوم والتقنية والتاريخ والجغرافيا. المستخدم اسمه ${USER}، ناده باسمه أحياناً. تاريخ اليوم: ${today()}.
 قواعد صارمة:
-1) الدقة أولاً: فكّر بتأنٍّ وتحقق من إجابتك داخلياً قبل كتابتها. لا تخمّن ولا تختلق أسماء أو تواريخ أو أرقاماً أو آيات أو أحاديث أو مصادر. إن لم تتأكد فقل ذلك صراحة.
-2) معرفتك الداخلية قد تكون قديمة وتنتهي قبل اليوم بكثير. لأي معلومة حديثة أو تتغير مع الزمن (مناصب، أحداث، أسعار، نتائج) اعتمد فقط على "المراجع الحديثة" أدناه، وإن لم تكفِ فقل إنك لا تملك معلومة حديثة مؤكدة. المراجع الحديثة تتقدم على ذاكرتك عند أي تعارض.
-3) الدين: التزم بما اتفق عليه جمهور أهل السنة والجماعة، وانسب الأقوال لأصحابها، ولا تذكر نص آية أو حديث إلا إذا كنت متأكداً منه حرفياً مع اسم السورة ورقم الآية أو الراوي ودرجة الحديث، وإلا اشرح المعنى دون اقتباس. في مسائل الخلاف اعرض الأقوال بإنصاف، وفي الفتاوى الشخصية انصح بسؤال عالم موثوق. اختم عند الحاجة بـ"والله أعلم".
-4) التاريخ: اذكر التواريخ والأسماء بحذر، ميّز بين المتفق عليه والمختلف فيه، ولا تنسب أحداثاً لغير أصحابها.
-5) الأسلوب: عربية فصحى بسيطة وواضحة جداً، جمل قصيرة، إجابة مباشرة تبدأ بالمطلوب، من 3 إلى 7 جمل (أكثر فقط إن لزم)، دون رموز تنسيق مثل النجوم والعناوين. في الحديث العادي كن طبيعياً ودوداً.
-${ctx?'\nالمراجع الحديثة:\n'+ctx:'\nلا توجد مراجع حديثة لهذا السؤال.'}`;
+1) الدقة فوق كل شيء: فكّر بتأنٍّ وتحقق من إجابتك داخلياً قبل كتابتها. لا تخمّن ولا تختلق أسماء أو تواريخ أو أرقاماً أو آيات أو أحاديث أو أقوال علماء أو مصادر. إن لم تتأكد فقل ذلك صراحة.
+2) معرفتك الداخلية قد تكون قديمة. لأي معلومة حديثة أو متغيرة (مناصب، أحداث، أسعار، نتائج رياضية) اعتمد فقط على "المراجع" أدناه، وإن لم تكفِ فقل إنك لا تملك معلومة حديثة مؤكدة. المراجع تتقدم على ذاكرتك عند التعارض.
+3) القرآن: إن وردت آية وتفسيرها في المراجع فاعتمدهما حرفياً. ولا تكتب آية من ذاكرتك إلا إذا كنت متيقناً من نصها كاملاً مع اسم السورة ورقم الآية، وإلا اشرح المعنى دون اقتباس. فسّر بما عليه التفاسير المعتمدة (الطبري، ابن كثير، السعدي، القرطبي).
+4) السنة: لا تنسب إلى النبي ﷺ قولاً لا تتيقن من ثبوته. اذكر الراوي والمصدر (البخاري، مسلم، السنن...) ودرجة الحديث، وإن لم تتأكد فبيّن المعنى وقل إنك لا تجزم بثبوت اللفظ. حذّر من الأحاديث الضعيفة والموضوعة المشهورة.
+5) الفقه والعقيدة: التزم بما عليه جمهور أهل السنة والجماعة، وانسب الأقوال لأصحابها والمذاهب الأربعة بإنصاف في مسائل الخلاف، ولا تُفتِ في الأحوال الشخصية الخاصة بل انصح بسؤال عالم موثوق. اختم عند الحاجة بـ"والله أعلم".
+6) الطب: معلومات علمية دقيقة وتحذيرات الخطر، دون تشخيص ولا وصف جرعات، وانصح بمراجعة الطبيب عند الحاجة.
+7) السياسة والاقتصاد والرياضة: حقائق محايدة دون تحيز، والجارية منها من المراجع فقط.
+8) التاريخ: ميّز بين المتفق عليه والمختلف فيه، واذكر التواريخ بحذر.
+9) الأسلوب: عربية فصحى بسيطة وواضحة جداً، إجابة مباشرة تبدأ بالمطلوب في 3 إلى 6 جمل (أكثر فقط إن لزم)، دون رموز تنسيق كالنجوم والعناوين. في الحديث العادي كن طبيعياً ودوداً وموجزاً.
+${ctx?'\nالمراجع:\n'+ctx:'\nلا توجد مراجع لهذا السؤال.'}`;
  const msgs=[{role:'system',content:sys},...hist.slice(-6),{role:'user',content:q}];
- const tries=[
-  ()=>fetch('https://text.pollinations.ai/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'openai',messages:msgs})}),
-  ()=>fetch('https://text.pollinations.ai/openai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'openai-large',messages:msgs})}),
-  ()=>fetch('https://text.pollinations.ai/'+encodeURIComponent(q)+'?model=openai&system='+encodeURIComponent(sys.slice(0,1800)))];
- for(const f of tries){try{const r=await tmo(f(),20000);const t=(await r.text()).trim();
-  if(r.ok&&t.length>1&&t[0]!=='{')return t;if(r.ok&&t[0]==='{'){try{const j=JSON.parse(t);const c=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;if(c)return c.trim()}catch(e){}}
-  lastErr='HTTP '+r.status}catch(e){lastErr=String(e&&e.message||'network')}}
+ const ok=t=>{t=(t||'').trim();if(t[0]==='{'){try{const j=JSON.parse(t);const c=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;return c?c.trim():''}catch(e){return ''}}return t.length>1?t:''};
+ const pol=m=>tmo(fetch('https://text.pollinations.ai/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:m,messages:msgs})}).then(async r=>{if(!r.ok){lastErr='HTTP '+r.status;throw 0}const t=ok(await r.text());if(!t)throw 0;return t}),18000);
+ const polGet=tmo(fetch('https://text.pollinations.ai/'+encodeURIComponent(q)+'?model=openai&system='+encodeURIComponent(sys.slice(0,1800))).then(async r=>{if(!r.ok)throw 0;const t=ok(await r.text());if(!t)throw 0;return t}),18000);
+ const oa=(url,key,model)=>tmo(fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model,messages:msgs,temperature:0.3})}).then(async r=>{if(!r.ok)throw 0;const t=ok(await r.text());if(!t)throw 0;return t}),18000);
+ const runs=[pol('openai'),pol('openai-large'),pol('mistral'),polGet];
+ if(KEYS.groq)runs.push(oa('https://api.groq.com/openai/v1/chat/completions',KEYS.groq,'llama-3.3-70b-versatile'));
+ if(KEYS.gemini)runs.push(oa('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',KEYS.gemini,'gemini-2.0-flash'));
+ if(KEYS.openrouter)runs.push(oa('https://openrouter.ai/api/v1/chat/completions',KEYS.openrouter,'meta-llama/llama-3.3-70b-instruct:free'));
+ try{return await Promise.any(runs)}catch(e){lastErr=lastErr||'network'}
  throw 0}
-async function send(text){text=(text||'').trim();if(!text||busy)return;inp.value='';
- line(`<span class="p"><b>${USER}</b></span> ${esc(text)}`);
+const IMG=/(ارسم|ارسمي|صمم|صمّم|صمّمي|ولد|ولّد|أنشئ|انشئ|اصنع|اصنعي|اعمل|أعمل|اعطني|أعطني|أريد|اريد|اطلب|أبغى|ابغي|بدي|عايز|draw|generate|create|make)\s+(لي\s+|ليا\s+|me\s+|an?\s+)?(صورة|صوره|رسمة|رسم|لوحة|شعار|لوغو|logo|تصميم|بوستر|poster|غلاف|أيقونة|ايقونة|image|picture|photo|illustration|wallpaper|خلفية|كاريكاتير|بورتريه)|^(ارسم|ارسمي|صمم|صمّم)\s/i;
+const EDIT=/^(غير|غيّر|عدل|عدّل|بدل|بدّل|اجعل|اجعلها|اجعله|أضف|اضف|احذف|أزل|ازل|كبر|كبّر|صغر|صغّر|أعد|اعد|مرة أخرى|مره اخرى|حاول مجدداً|حاول مجددا|غيرها|غيره)/;
+let lastPrompt='',lastWasImg=false,curImg=null,curT=0;
+async function drawImg(text,w){const F='<span class="f">FATY&gt;</span> ';D.length=0;
+ let en=text,asp='square';
+ const sysd=`You are an expert prompt director for an AI image generator (FLUX). Read the user's request (any language, often Arabic) and understand EXACTLY what they want. Return ONLY compact JSON: {"prompt":"...","aspect":"square|landscape|portrait"}.
+Rules for "prompt": a single English paragraph, 60-120 words. Keep EVERY detail the user asked for literally (subject, number of objects, colors, clothing, setting, time of day, mood, style, any text). Never replace or omit the main subject; never add unrelated objects or people. Describe the subject first, then composition, camera/lens, lighting, color palette, background, and art style (if none requested, choose the best fitting professional style: photorealistic for real things, clean vector for logos, etc.). End with quality words (masterpiece, ultra detailed, sharp focus, 8k).${lastPrompt?`\nThe user may be refining the previous image. Previous prompt: "${lastPrompt}". If the new message modifies it (change color, add, remove...), apply the change to the previous prompt and keep everything else.`:''}
+aspect: landscape for scenes, banners, wallpapers, cinematic; portrait for people full-body, phone wallpapers, posters, stories; otherwise square.`;
+ try{const t=await askLLM([{role:'system',content:sysd},{role:'user',content:text}],10000);const j=JSON.parse(t.slice(t.indexOf('{'),t.lastIndexOf('}')+1));if(j.prompt&&j.prompt.length>10){en=j.prompt.slice(0,1100);asp=j.aspect||'square'}}catch(e){}
+ if(/(افقي|أفقي|عريض|landscape|16:9|سينمائي)/i.test(text))asp='landscape';else if(/(طولي|عمودي|portrait|9:16|ستوري)/i.test(text))asp='portrait';else if(/(مربع|square|1:1)/i.test(text))asp='square';
+ const W=asp==='landscape'?1280:asp==='portrait'?768:1024,H=asp==='landscape'?720:asp==='portrait'?1280:1024;
+ lastPrompt=en;const seed=Math.floor(Math.random()*1e6),q=encodeURIComponent(en);
+ const mk=m=>`https://image.pollinations.ai/prompt/${q}?width=${W}&height=${H}&nologo=true&private=true&seed=${seed}&model=${m}`;
+ const loadUrl=u=>tmo(new Promise((res,rej)=>{const t=new Image();t.onload=()=>res(u);t.onerror=()=>rej(new Error('تعذر التحميل'));t.src=u}),80000);
+ const hfImg=async()=>{const r=await tmo(fetch('https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell',{method:'POST',headers:{Authorization:'Bearer '+KEYS.hf,'Content-Type':'application/json'},body:JSON.stringify({inputs:en})}),60000);if(!r.ok)throw new Error('HTTP '+r.status);return URL.createObjectURL(await r.blob())};
+ const togImg=async()=>{const r=await tmo(fetch('https://api.together.xyz/v1/images/generations',{method:'POST',headers:{Authorization:'Bearer '+KEYS.together,'Content-Type':'application/json'},body:JSON.stringify({model:'black-forest-labs/FLUX.1-schnell-Free',prompt:en,width:W>1024?1024:W,height:H>1024?1024:H,steps:4,n:1,response_format:'b64_json'})}),60000);if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();return 'data:image/png;base64,'+j.data[0].b64_json};
+ const run=(n,f,d)=>trk('صورة/'+n,(d?sleep(d):Promise.resolve()).then(f));
+ const R=[run('flux',()=>loadUrl(mk('flux')),0)];
+ if(KEYS.together)R.push(run('together',togImg,0));if(KEYS.hf)R.push(run('huggingface',hfImg,0));
+ const signed=await puterSigned();if(signed)R.push(run('puter',()=>puterImg(en),0));
+ R.push(run('turbo',()=>loadUrl(mk('turbo')),12000));
+ let url=null;try{url=await Promise.any(R)}catch(e){}
+ if(!url&&window.puter&&!signed){try{url=await trk('صورة/puter',puterImg(en))}catch(e){}}
+ if(!url){w.innerHTML=F+'تعذر رسم الصورة الآن، أعد المحاولة.<br><span class="sys" style="font-size:13px">('+esc(D.join(' | ').slice(0,350))+')</span>';busy=false;return}
+ lastWasImg=true;curImg=null;w.innerHTML=F+`<img src="${url}" alt="" style="display:block;max-width:100%;width:${asp==='portrait'?340:520}px;margin-top:8px;border-radius:12px;border:1px solid #ffffff33">`;log.scrollTop=log.scrollHeight;busy=false}
+let SUR=null;
+async function quran(q){if(!SUR){const j=await (await fetch('https://api.alquran.cloud/v1/surah')).json();SUR=j.data}
+ const n=t=>t.replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');
+ const qq=n(q.replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d))),m=qq.match(/(\d{1,3})/);if(!m)return '';
+ let best=null,bl=0;for(const x of SUR){let nm=n(x.name).replace(/^سوره\s*/,'').trim();const k=nm.replace(/^ال/,'');for(const c of [nm,k]){if(c.length>2&&qq.includes(c)&&c.length>bl){best=x;bl=c.length}}}
+ if(!best)return '';const ay=+m[1];if(ay<1||ay>best.numberOfAyahs)return '';
+ const d=(await (await fetch(`https://api.alquran.cloud/v1/ayah/${best.number}:${ay}/editions/quran-uthmani,ar.muyassar`)).json()).data;
+ return `[القرآن الكريم: ${best.name} آية ${ay}] ${d[0].text}\n[التفسير الميسر] ${d[1].text}`}
+const norm=t=>t.replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[\u064B-\u0652\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[^\u0621-\u064Aa-z0-9\s-]/gi,' ');
+const indic=n=>String(n).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[d]);
+async function quranDirect(q){const n=norm(q);let no=null,rg=null;
+ if(/ايه\s*الكرسي/.test(n)){no=2;rg=[255,255]}
+ else{const w=n.split(/\s+/).filter(Boolean),i=w.indexOf('سوره');if(i<0)return null;
+  if(!SUR){const j=await (await fetch('https://api.alquran.cloud/v1/surah')).json();SUR=j.data}
+  const cand=x=>{const nm=norm(x.name).replace(/^\s*سوره\s*/,'').replace(/\s+/g,'');return [nm,nm.replace(/^ال/,'')]};
+  const t1=w[i+1]||'',t2=t1+(w[i+2]||'');
+  let f=SUR.find(x=>t2&&cand(x).includes(t2))||SUR.find(x=>t1&&cand(x).includes(t1));if(!f)return null;no=f.number;
+  const m=n.replace(/سوره[\s\S]*?(?=\d|$)/,'').match(/(\d{1,3})\s*(?:الي|حتي|-|الى)\s*(\d{1,3})/)||n.match(/(\d{1,3})\s*(?:الي|حتي|-)\s*(\d{1,3})/);
+  if(m)rg=[+m[1],+m[2]];else{const o=n.match(/(?:ايه|اية|آية)\s*(\d{1,3})/);if(o)rg=[+o[1],+o[1]]}}
+ const d=(await (await fetch(`https://api.alquran.cloud/v1/surah/${no}/quran-uthmani`)).json()).data;
+ let ay=d.ayahs;if(rg){const a=Math.max(1,Math.min(rg[0],rg[1])),b=Math.max(rg[0],rg[1]);ay=ay.filter(x=>x.numberInSurah>=a&&x.numberInSurah<=b);if(!ay.length)return null}
+ const head=`${d.name}${rg?(ay.length===1?` — الآية ${indic(ay[0].numberInSurah)}`:` — الآيات ${indic(ay[0].numberInSurah)} إلى ${indic(ay[ay.length-1].numberInSurah)}`):` (${indic(d.numberOfAyahs)} آية)`}`;
+ return `<b>${head}</b><br><span style="font-family:'Amiri','Scheherazade New','Traditional Arabic','Noto Naskh Arabic',serif;font-size:25px;line-height:2.7">${ay.map(x=>`${x.text} ﴿${indic(x.numberInSurah)}﴾`).join(' ')}</span>`}
+let pend=null;
+const REFUSE=/(لا أستطيع رؤية|لا استطيع رؤية|لا يمكنني رؤية|لا أستطيع مشاهدة|لا يمكنني مشاهدة|لم أتمكن من رؤية|لا أرى (أي )?صورة|لم يتم (إرفاق|رفع)|لم تُرفق|cannot (see|view)|can't (see|view)|unable to (see|view)|don't see (an|any) image)/i;
+const D=[];const trk=(n,p)=>p.catch(e=>{D.push(n+': '+((e&&(e.message||e.msg))||'خطأ'));throw e});
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const pick=t=>{t=(t||'').trim();if(t[0]==='{'){try{const j=JSON.parse(t);t=(((j.choices||[])[0]||{}).message||{}).content||''}catch(e){return ''}}return (t||'').trim()};
+const post=(url,hdr,body,ms)=>tmo(fetch(url,{method:'POST',headers:Object.assign({'Content-Type':'application/json'},hdr||{}),body:JSON.stringify(body)}).then(async r=>{const t=await r.text();if(!r.ok)throw new Error('HTTP '+r.status);const o=pick(t);if(!o)throw new Error('رد فارغ');return o}),ms||30000);
+const URLS={groq:'https://api.groq.com/openai/v1/chat/completions',gemini:'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',openrouter:'https://openrouter.ai/api/v1/chat/completions'};
+function askLLM(msgs,ms){const R=[];for(const m of ['openai','openai-large','mistral'])R.push(post('https://text.pollinations.ai/',{},{model:m,messages:msgs},ms||12000));
+ if(KEYS.groq)R.push(post(URLS.groq,{Authorization:'Bearer '+KEYS.groq},{model:'llama-3.3-70b-versatile',messages:msgs},ms||12000));
+ if(KEYS.gemini)R.push(post(URLS.gemini,{Authorization:'Bearer '+KEYS.gemini},{model:'gemini-flash-latest',messages:msgs},ms||12000));
+ if(KEYS.openrouter)R.push(post(URLS.openrouter,{Authorization:'Bearer '+KEYS.openrouter},{model:'meta-llama/llama-3.3-70b-instruct:free',messages:msgs},ms||12000));
+ return Promise.any(R)}
+const puterSigned=async()=>{try{return !!window.puter&&await puter.auth.isSignedIn()}catch(e){return false}};
+const ptxt=r=>{if(!r)return '';if(typeof r==='string')return r;const c=r.message&&r.message.content;if(typeof c==='string')return c;if(Array.isArray(c))return c.map(x=>x.text||'').join('');return String(r.text||'')};
+async function puterVision(q,img,sys){let last;for(const m of ['gpt-4o-mini','gemini-2.0-flash','gpt-4o']){try{const t=ptxt(await puter.ai.chat(sys+'\n\n'+q,img,false,{model:m}));if(t.length>5&&!REFUSE.test(t.slice(0,200)))return t.trim()}catch(e){last=e}}throw new Error('puter '+((last&&(last.message||last.msg))||'فشل'))}
+async function puterImg(en){let last;for(const m of ['gpt-image-1','dall-e-3','']){try{const el=await puter.ai.txt2img(en,m?{model:m}:false);if(el&&el.src)return el.src}catch(e){last=e}}throw new Error('puter '+((last&&(last.message||last.msg))||'فشل'))}
+const chk=t=>{if(REFUSE.test(t.slice(0,200)))throw new Error('رفض الرؤية');if(t.length<5)throw new Error('قصير');return t};
+async function vision(q,img){D.length=0;
+ const sys=`أنت FATY، خبير بتحليل الصور ومساعد ذكاء اصطناعي عربي. المستخدم اسمه ${USER}. أنت ترى الصورة المرفقة فعلاً، فلا تقل أبداً إنك لا تستطيع رؤيتها. حلّل الصورة بدقة وأجب بالعربية الفصحى الواضحة دون رموز تنسيق: (1) صف ما تراه بدقة (الأشياء، الألوان، الأشخاص دون التعرف عليهم من ملامحهم، المكان). (2) سمِّ الشيء الرئيسي وما هو. (3) بيّن لمن يُستخدم ولأي غرض. (4) اشرح كيف يُستخدم خطوة بخطوة إن كان أداة أو منتجاً أو دواءً أو جهازاً، مع تنبيهات السلامة المهمة. (5) اقرأ أي نص ظاهر في الصورة. (6) أجب أولاً عن سؤال المستخدم تحديداً إن وُجد. لا تختلق ما لا تراه، وإن لم تتأكد فقل ذلك.`;
+ const msgs=[{role:'system',content:sys},{role:'user',content:[{type:'text',text:q},{type:'image_url',image_url:{url:img}}]}];
+ const R=[],P=(n,u,hd,m)=>R.push(trk(n,post(u,hd,{model:m,messages:msgs},50000).then(chk)));
+ P('pollinations/openai','https://text.pollinations.ai/openai',{},'openai');
+ P('pollinations/root','https://text.pollinations.ai/',{},'openai');
+ P('pollinations/large','https://text.pollinations.ai/openai',{},'openai-large');
+ P('pollinations/gemini','https://text.pollinations.ai/openai',{},'gemini');
+ P('pollinations/claude','https://text.pollinations.ai/openai',{},'claude');
+ if(KEYS.groq)P('groq',URLS.groq,{Authorization:'Bearer '+KEYS.groq},'meta-llama/llama-4-scout-17b-16e-instruct');
+ if(KEYS.gemini)for(const gm of ['gemini-flash-latest','gemini-2.5-flash','gemini-2.0-flash'])P('gemini/'+gm,URLS.gemini,{Authorization:'Bearer '+KEYS.gemini},gm);
+ if(KEYS.openrouter)P('openrouter',URLS.openrouter,{Authorization:'Bearer '+KEYS.openrouter},'google/gemma-3-27b-it:free');
+ const signed=await puterSigned();if(signed)R.push(trk('puter',puterVision(q,img,sys)));
+ try{return await Promise.any(R)}catch(e){}
+ if(window.puter&&!signed){try{return await trk('puter',puterVision(q,img,sys))}catch(e){}}
+ throw new Error(D.join(' | '))}
+$('att').onclick=e=>{e.stopPropagation();$('file').click()};
+$('file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f||!f.type.startsWith('image/'))return;
+ const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,800/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);pend=c.toDataURL('image/jpeg',.8);
+  line(`<span class="p"><b>${USER}</b></span><br><img src="${pend}" alt="" style="max-width:300px;max-height:300px;border-radius:12px;margin-top:6px;border:1px solid #ffffff33">`);
+  line('<span class="f">FATY&gt;</span> اكتب سؤالك عن الصورة ثم اضغط إرسال.','sys');inp.focus()};im.src=r.result};r.readAsDataURL(f)};
+async function send(text){text=(text||'').trim();if((!text&&!pend)||busy)return;inp.value='';
+ if(text)line(`<span class="p"><b>${USER}</b></span> ${esc(text)}`);
+ const FOLLOW=/(هذا|هذه|هذي|الصورة|فيها|منه|منها|يستخدم|تستخدم|يُستخدم|تُستخدم|استخدام|استعمال|ما اسم|ماذا يعني)/;
+ if(!pend&&!(curImg&&Date.now()-curT<6e5&&FOLLOW.test(text)&&!IMG.test(text))&&/(حلل (لي )?(هذه )?الصورة|ماذا (يوجد )?في (هذه )?الصورة|هذه الصورة|الصورة المرفقة)/.test(text)){line('<span class="f">FATY&gt;</span> ارفع الصورة أولاً بزر 📎 بجانب الميكروفون ثم اكتب سؤالك.');return}
+ if(pend||(curImg&&Date.now()-curT<6e5&&FOLLOW.test(text)&&!IMG.test(text))){const fresh=!!pend,im=pend||curImg;pend=null;busy=true;const w=line('<span class="f">FATY&gt;</span> <span class="sys cur">جارٍ البحث... </span>');
+  const Q=text||'حلل هذه الصورة: ماذا فيها بالتفصيل؟ وما هو الشيء الرئيسي؟ ولمن يُستخدم؟ وكيف يُستخدم؟',FL='<span class="f">FATY&gt;</span> ';
+  const ok=t=>{curImg=im;curT=Date.now();w.innerHTML=FL+esc(t);say(t)};
+  try{ok(await vision(Q,im))}
+  catch(e){let err=e;
+   if(!KEYS.gemini&&await askKey()){try{ok(await vision(Q,im));busy=false;return}catch(e2){err=e2}}
+   if(fresh)pend=im;const m=String(err&&err.message||'');
+   w.innerHTML=FL+(/402/.test(m)?'الخوادم المجانية بلا مفتاح صارت تطلب الدفع لتحليل الصور. أعد رفع الصورة واضغط إرسال، وألصق مفتاح Gemini المجاني حين يُطلب منك.':'تعذر تحليل الصورة، جرّبت عدة خوادم ولم تنجح. حاول مرة أخرى.')+'<br><span class="sys" style="font-size:13px">('+esc(m.slice(0,350))+')</span>'}finally{busy=false}return}
+ if(!/(تفسير|فسر|فسّر|معنى|شرح)/.test(text)){let qd=null;try{qd=await quranDirect(text)}catch(e){}if(qd){line('<span class="f">FATY&gt;</span> '+qd);return}}
  if(NAME.test(text)&&text.replace(NAME,'').replace(/[\s،,؟?!يا]/g,'').length<2){const r=`نعم يا ${USER}، أنا FATY. كيف أساعدك؟`;line('<span class="f">FATY&gt;</span> '+r);say(r);return}
  busy=true;const w=line('<span class="f">FATY&gt;</span> <span class="sys cur">جارٍ البحث... </span>');let h=[],ctx='',wk='';
+ if(IMG.test(text)||(lastWasImg&&EDIT.test(text))){drawImg(text,w);return}
+ lastWasImg=false;
  try{if(text.length>10&&!CHAT.test(text)){
-   const [hr,wr]=await Promise.all([tmo(headlines(text,6),4000).catch(()=>[]),tmo(wiki(text),3500).catch(()=>'')]);
-   h=hr;wk=wr;ctx=(h.length?'عناوين أخبار حديثة:\n'+h.map((x,i)=>`${i+1}. ${x.t}`).join('\n')+'\n':'')+wr}
+   const needNews=/(خبر|أخبار|اخبار|عاجل|اليوم|الآن|حالي|آخر|جديد|سعر|أسعار|نفط|ذهب|دولار|بورص|انتخاب|حرب|رئيس|وزير|مباراة|نتيجة|دوري|كأس|تطورات|news)/i.test(text),needQ=/(آية|ايه|اية|سورة|سوره|تفسير)/.test(text);
+   const [hr,wr,qr]=await Promise.all([needNews?tmo(headlines(text,5),1800).catch(()=>[]):[],!needNews&&text.length>14?tmo(wiki(text),1500).catch(()=>''):'',needQ?tmo(quran(text),2500).catch(()=>''):'']);
+   h=hr;wk=wr;ctx=(h.length?'عناوين أخبار حديثة:\n'+h.map((x,i)=>`${i+1}. ${x.t}`).join('\n')+'\n':'')+wr+(qr?'\n'+qr:'')}
   try{const t=await ai(text,ctx);w.innerHTML='<span class="f">FATY&gt;</span> '+esc(t);hist.push({role:'user',content:text},{role:'assistant',content:t});say(t)}
   catch(e){const F='<span class="f">FATY&gt;</span> ',err=`<br><span class="sys" style="font-size:14px">(تعذر الاتصال بخدمة الذكاء الاصطناعي المجانية: ${esc(lastErr)})</span>`;
    if(wk){const t=wk.split('\n')[0].replace(/^\[[^\]]*\]\s*/,'');w.innerHTML=F+'هذا ما وجدته في ويكيبيديا:<br>'+esc(t)+err}
@@ -95,11 +206,21 @@ async function send(text){text=(text||'').trim();if(!text||busy)return;inp.value
    else w.innerHTML=F+'تعذر الرد الآن.'+err}}
  finally{busy=false}}
 $('go').onclick=e=>{e.stopPropagation();send(inp.value)};inp.onkeydown=e=>{if(e.key==='Enter')send(inp.value)};document.body.onclick=e=>{if(!getSelection().toString()&&e.target.tagName!=='A')inp.focus()};
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec,on=false;const mic=$('mic');
-if(!SR){mic.disabled=true;mic.title='يدعم Chrome وEdge'}else{rec=new SR();rec.lang='ar-SA';rec.interimResults=true;
- rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;inp.value=t;if(e.results[e.results.length-1].isFinal)send(t)};
- rec.onend=()=>{on=false;mic.classList.remove('rec')};rec.onerror=()=>{on=false;mic.classList.remove('rec')}}
-mic.onclick=e=>{e.stopPropagation();if(!rec)return;if(on){rec.stop();return}speechSynthesis.cancel();try{rec.start();on=true;mic.classList.add('rec')}catch(x){}};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,on=false;const mic=$('mic');
+const micMsg=t=>line('<span class="f">FATY&gt;</span> '+t,'sys');
+const stopMic=()=>{on=false;mic.classList.remove('rec')};
+async function startMic(){
+ if(!SR){micMsg('هذا المتصفح لا يدعم الإدخال الصوتي، استخدم Chrome أو Edge.');return}
+ speechSynthesis.cancel();
+ try{const st=await navigator.mediaDevices.getUserMedia({audio:true});st.getTracks().forEach(t=>t.stop())}
+ catch(e){micMsg(e&&e.name==='NotFoundError'?'لم يتم العثور على ميكروفون في جهازك.':'اسمح للمتصفح بالوصول إلى الميكروفون من أيقونة القفل بجانب عنوان الصفحة ثم اضغط الميكروفون مجدداً. وإن فتحت الصفحة داخل معاينة فافتحها في تبويب مستقل.');return}
+ rec=new SR();rec.lang='ar-SA';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;let got=false;
+ rec.onstart=()=>{on=true;mic.classList.add('rec')};
+ rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;inp.value=t;got=true;if(e.results[e.results.length-1].isFinal){stopMic();send(t)}};
+ rec.onerror=e=>{stopMic();const m={'not-allowed':'الميكروفون غير مسموح به، اسمح له من إعدادات الموقع.','service-not-allowed':'خدمة التعرف على الصوت غير مسموحة في هذا المتصفح أو هذه الصفحة.','no-speech':'لم أسمع صوتاً، حاول مرة أخرى.','audio-capture':'لا يوجد ميكروفون متاح.','network':'الإدخال الصوتي يحتاج اتصالاً بالإنترنت لأنه يعتمد على خدمة Google، ولا يعمل في متصفح Brave.','language-not-supported':'اللغة العربية غير مدعومة في هذا المتصفح.'}[e.error];if(m)micMsg(m)};
+ rec.onend=()=>{if(on){stopMic();if(got&&inp.value.trim()&&!busy)send(inp.value)}};
+ try{rec.start()}catch(e){stopMic();micMsg('تعذر تشغيل الميكروفون، أعد تحميل الصفحة وحاول مجدداً.')}}
+mic.onclick=e=>{e.stopPropagation();if(on){try{rec.stop()}catch(x){}stopMic();return}startMic()};
 </script>
 </body>
 </html>
